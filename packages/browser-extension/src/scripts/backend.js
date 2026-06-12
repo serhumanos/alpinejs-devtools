@@ -133,6 +133,24 @@ export function init(forceStart = false) {
           if (!isLeafStackEntry) {
             mergedDataStack = Object.assign(mergedDataStack, stackEntry);
           } else {
+            // First collect own properties of the child (non-getters)
+            const leafOwnData = {};
+            Object.entries(Object.getOwnPropertyDescriptors(stackEntry)).forEach(
+              ([prop, descriptor]) => {
+                if (!descriptor.enumerable) {
+                  // magics are non-enumerable
+                  return;
+                }
+                if (typeof descriptor.get !== 'function') {
+                  leafOwnData[prop] = descriptor.value;
+                }
+              }
+            );
+
+            // Full context: parent + child (child overrides parent)
+            const getterContext = Object.assign({}, mergedDataStack, leafOwnData);
+
+            // Now process all properties with the correct context
             Object.entries(Object.getOwnPropertyDescriptors(stackEntry)).forEach(
               ([prop, descriptor]) => {
                 if (!descriptor.enumerable) {
@@ -140,8 +158,8 @@ export function init(forceStart = false) {
                   return;
                 }
                 if (typeof descriptor.get === 'function') {
-                  // this is a getter, evaluate with nested context
-                  leafDataObj[prop] = descriptor.get.call(mergedDataStack);
+                  // this is a getter, evaluate with nested context (parent + child)
+                  leafDataObj[prop] = descriptor.get.call(getterContext);
                   // TODO: need to hide the edit button etc, if this
                   // doesn't have a `descriptor.set !== 'function'` function
                   // and/or `!!descriptor.writable`
